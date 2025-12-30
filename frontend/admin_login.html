@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #fde6e6; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .login-card { padding: 30px; border-radius: 12px; background-color: #f8d7da; width: 100%; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .login-card h2 { color: #dc3545; text-align: center; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div id="app" class="login-card" align="centre">
+        <h2>Admin Login</h2>
+        <form @submit.prevent="login">
+            <div class="mb-3">
+                <label class="form-label">Admin ID</label>
+                <input type="text" class="form-control" v-model="aid" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Password</label>
+                <input type="password" class="form-control" v-model="password" required>
+            </div>
+            <button type="submit" class="btn btn-danger w-100">Login</button>
+        </form>
+        <p class="text-center mt-3">
+            <a href="index.html">Back to Home</a>
+        </p>
+    </div>
+
+    <footer style="
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background-color: #0077b6;
+        color: white;
+        text-align: center;
+        padding: 10px 0;
+        font-size: 14px;
+        box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+    ">
+        &copy; 2025 Quickpark 23f3002603
+    </footer>
+
+    <script>
+    const { createApp } = Vue;
+
+    createApp({
+        data() {
+            return {
+                aid: '',
+                password: ''
+            }
+        },
+        methods: {
+            async login() {
+                try {
+                    const response = await fetch('http://127.0.0.1:5000/admin/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ aid: this.aid, password: this.password })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        // SAVE TOKEN WITH CORRECT NAME
+                        localStorage.setItem("admin_token", data.token);
+
+                        alert(`Welcome Admin ${this.aid}!`);
+                        window.location.href = 'admin_dashboard.html';
+                    } else {
+                        alert(data.error || 'Invalid credentials');
+                    }
+                } catch (err) {
+                    console.error('Login error:', err);
+                    alert('Server error. Try again later.');
+                }
+            }
+        }
+    }).mount('#app');
+    </script>
+</body>
+</html>

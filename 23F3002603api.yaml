@@ -1,0 +1,555 @@
+openapi: 3.0.3
+info:
+  title: QuickPark V2 API
+  version: 1.0.0
+  description: API documentation for QuickPark V2 Parking Management App
+
+servers:
+  - url: http://localhost:5000
+    description: Local development server
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        uid:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        age:
+          type: integer
+        mob_no:
+          type: integer
+        is_blocked:
+          type: boolean
+    Admin:
+      type: object
+      properties:
+        aid:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        age:
+          type: integer
+        mob_no:
+          type: integer
+    ParkingLot:
+      type: object
+      properties:
+        lotid:
+          type: integer
+        location:
+          type: string
+        address:
+          type: string
+        pin:
+          type: string
+        price:
+          type: integer
+        no_of_slot:
+          type: integer
+        description:
+          type: string
+        is_paused:
+          type: boolean
+    ParkingSpot:
+      type: object
+      properties:
+        spotid:
+          type: integer
+        lotid:
+          type: integer
+        status:
+          type: boolean
+    ReserveParkingSpot:
+      type: object
+      properties:
+        id:
+          type: integer
+        uid:
+          type: string
+        lot_id:
+          type: integer
+        spot_id:
+          type: integer
+        price:
+          type: integer
+        reserved_at:
+          type: string
+          format: date-time
+        released_at:
+          type: string
+          format: date-time
+        total_cost:
+          type: integer
+        vehicle_number:
+          type: string
+
+paths:
+
+  # ------------------- USER ROUTES -------------------
+  /signup:
+    post:
+      summary: User signup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                uid:
+                  type: string
+                password:
+                  type: string
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+                age:
+                  type: integer
+                mob_no:
+                  type: integer
+      responses:
+        '201':
+          description: User created successfully
+        '400':
+          description: Username already taken
+
+  /login:
+    post:
+      summary: User login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                uid:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+        '401':
+          description: Invalid credentials
+
+  /user/edit:
+    get:
+      summary: Get user profile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User profile data
+    put:
+      summary: Update user profile
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+                age:
+                  type: integer
+                mob_no:
+                  type: integer
+      responses:
+        '200':
+          description: Profile updated
+
+  /dashboard:
+    get:
+      summary: User dashboard
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Active and released reservations count
+
+  /user/active:
+    get:
+      summary: Get active reservations
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of active reservations
+
+  /user/delete:
+    delete:
+      summary: Delete user account
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Account deleted
+        '400':
+          description: Cannot delete account with active reservation
+
+  /user/lots:
+    get:
+      summary: Get all parking lots
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of parking lots with vacant spots
+
+  /user/history:
+    get:
+      summary: User reservation history
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: History of reservations
+
+  /reserve/{lotid}:
+    post:
+      summary: Reserve a parking spot
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lotid
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                vehicle_number:
+                  type: string
+      responses:
+        '200':
+          description: Spot reserved successfully
+        '400':
+          description: Invalid vehicle format or no available spot
+
+  /release/{reservation_id}:
+    post:
+      summary: Release reserved spot
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: reservation_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Spot released successfully
+        '403':
+          description: Unauthorized release
+
+  /payment/{reservation_id}:
+    post:
+      summary: Calculate payment for released reservation
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: reservation_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Payment calculated successfully
+        '400':
+          description: Spot not released yet
+
+  /user/monthly_report:
+    get:
+      summary: Get JSON monthly report
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Monthly report
+
+  /user/monthly_report_csv:
+    get:
+      summary: Download monthly report PDF
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: PDF report
+
+  # ------------------- ADMIN ROUTES -------------------
+  /admin/login:
+    post:
+      summary: Admin login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                aid:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Admin login successful
+        '401':
+          description: Invalid credentials
+
+  /admin/dashboard:
+    get:
+      summary: Admin dashboard stats
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Admin stats summary
+
+  /admin/users:
+    get:
+      summary: List all users
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Users list
+
+  /admin/user/{uid}/block:
+    post:
+      summary: Block/unblock a user
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+      responses:
+        '200':
+          description: User blocked/unblocked
+        '403':
+          description: Invalid admin password
+
+  /admin/user/{uid}:
+    put:
+      summary: Edit user details
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+                age:
+                  type: integer
+                mob_no:
+                  type: integer
+      responses:
+        '200':
+          description: User updated
+
+  /admin/parkinglots:
+    get:
+      summary: Get all parking lots
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Parking lots list
+    post:
+      summary: Create new parking lot
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                location:
+                  type: string
+                address:
+                  type: string
+                pin:
+                  type: string
+                no_of_slot:
+                  type: integer
+                price:
+                  type: integer
+      responses:
+        '201':
+          description: Parking lot created
+
+  /admin/parking_lot/{lotid}:
+    put:
+      summary: Edit parking lot
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lotid
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                location:
+                  type: string
+                address:
+                  type: string
+                pin:
+                  type: string
+                price:
+                  type: integer
+                no_of_slot:
+                  type: integer
+                description:
+                  type: string
+                is_paused:
+                  type: boolean
+      responses:
+        '200':
+          description: Parking lot updated
+
+  /admin/parkinglots/{lotid}:
+    delete:
+      summary: Delete parking lot
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lotid
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Parking lot deleted
+        '400':
+          description: Cannot delete lot with active reservations
+
+  /admin/user/{uid}/history:
+    get:
+      summary: Get user's reservation history
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User history
+
+  /admin/stats/bookings_per_lot:
+    get:
+      summary: Bookings per parking lot
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Chart data
+
+  /admin/stats/revenue_per_lot:
+    get:
+      summary: Revenue per parking lot
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Revenue chart
+
+  /admin/stats/bookings_per_user:
+    get:
+      summary: Bookings per user
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Bookings per user chart
+
+  /admin/send_report/{uid}:
+    post:
+      summary: Trigger monthly report task for user
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Task triggered
+
+  /admin/export_csv:
+    post:
+      summary: Trigger CSV export task for parking lot
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                lot_id:
+                  type: integer
+      responses:
+        '200':
+          description: CSV export task triggered

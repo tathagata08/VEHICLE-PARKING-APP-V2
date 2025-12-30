@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Your Reservations</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-light">
+<div id="app" class="container mt-4">
+
+    <h2 class="text-center mb-4">Your Reservations</h2>
+
+    <div v-if="loading" class="alert alert-info">Loading...</div>
+
+    <div v-else-if="reservations.length === 0" class="alert alert-warning text-center">
+        No reservations found.
+    </div>
+
+    <div v-else>
+        <table class="table table-striped table-bordered">
+            <thead class="table-dark">
+            <tr>
+                <th>Vehicle Number</th>
+                <th>Lot</th>
+                <th>Spot</th>
+                <th>Reserved</th>
+                <th>Duration</th>
+                <th>Cost</th>
+                <th>Status</th>
+            </tr>
+            </thead>
+
+            <tbody>
+            <tr v-for="r in reservations" :key="r.id">
+                <td>{{ r.vehicle_number }}</td>
+                <td>LOT-{{ r.lot_id }}</td>
+                <td>{{ r.spot_id }}</td>
+                <td>{{ formatTimeRange(r.reserved_at, r.released_at) }}</td>
+                <td>{{ formatDuration(r.reserved_at, r.released_at) }}</td>
+                <td>{{ r.total_cost || 0 }}</td>
+                <td>
+                    <span v-if="!r.released_at" class="text-danger fw-bold">Active</span>
+                    <span v-else class="text-success">Released</span>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h3 class="mt-4 text-center">Your Parking Stats</h3>
+    <div class="row mt-3">
+        <div class="col-md-6">
+            <canvas id="statusPieChart"></canvas>
+        </div>
+        <div class="col-md-6">
+            <canvas id="occupancyLineChart"></canvas>
+        </div>
+        <div class="col-md-12 mt-4">
+            <canvas id="revenueChart" height="200"></canvas>
+        </div>
+    </div>
+
+</div>
+
+<script>
+
+function renderUserStats(reservations) {
+    if (!reservations || reservations.length === 0) return;
+
+    
+    const activeCount = reservations.filter(r => !r.released_at).length;
+    const releasedCount = reservations.filter(r => r.released_at).length;
+
+    const pieCtx = document.getElementById("statusPieChart").getContext("2d");
+    new Chart(pieCtx, {
+        type: "pie",
+        data: {
+            labels: ["Active", "Released"],
+            datasets: [{
+                data: [activeCount, releasedCount],
+                backgroundColor: ["#dc3545", "#28a745"]
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: "bottom" },
+                title: { display: true, text: "Reservation Status" }
+            }
+        }
+    });
+
+    
+    const occupancyMap = {};
+    reservations.forEach(r => {
+        const start = new Date(r.reserved_at);
+        const end = r.released_at ? new Date(r.released_at) : new Date();
+        let current = new Date(start);
+        while (current <= end) {
+            const key = current.toISOString().split("T")[0];
+            occupancyMap[key] = (occupancyMap[key] || 0) + 1;
+            current.setDate(current.getDate() + 1);
+        }
+    });
+
+    const labels = Object.keys(occupancyMap).sort();
+    const dataPoints = labels.map(d => occupancyMap[d]);
+
+    const lineCtx = document.getElementById("occupancyLineChart").getContext("2d");
+    new Chart(lineCtx, {
+        type: "line",
+        data: {
+            labels: labels,
+            datasets: [{
+                label: "Active Reservations",
+                data: dataPoints,
+                borderColor: "#007bff",
+                backgroundColor: "rgba(0,123,255,0.2)",
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: true },
+                title: { display: true, text: "Daily Occupancy" }
+            },
+            scales: {
+                x: { title: { display: true, text: "Date" } },
+                y: { title: { display: true, text: "Number of Reservations" }, beginAtZero: true }
+            }
+        }
+    });
+
+    // ===== BAR CHART: Revenue per Day =====
+    const revenueMap = {};
+    reservations.forEach(r => {
+        const key = new Date(r.reserved_at).toISOString().split("T")[0];
+        revenueMap[key] = (revenueMap[key] || 0) + (r.total_cost || 0);
+    });
+
+    const revenueLabels = Object.keys(revenueMap).sort();
+    const revenueData = revenueLabels.map(d => revenueMap[d]);
+
+    const revenueCtx = document.getElementById("revenueChart").getContext("2d");
+    new Chart(revenueCtx, {
+        type: "bar",
+        data: {
+            labels: revenueLabels,
+            datasets: [{
+                label: "Revenue (₹)",
+                data: revenueData,
+                backgroundColor: "#ffc107"
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                title: { display: true, text: "Revenue per Day" }
+            },
+            scales: {
+                x: { title: { display: true, text: "Date" } },
+                y: { title: { display: true, text: "Revenue (₹)" }, beginAtZero: true }
+            }
+        }
+    });
+}
+
+const { createApp } = Vue;
+
+createApp({
+    data() {
+        return {
+            token: localStorage.getItem("token"),
+            reservations: [],
+            loading: true
+        };
+    },
+
+    methods: {
+        async loadReservations() {
+            if (!this.token) {
+                alert("Please login first");
+                window.location.href = "user_login.html";
+                return;
+            }
+
+            const res = await fetch("http://127.0.0.1:5000/user/history", {
+                headers: { "Authorization": `Bearer ${this.token}` }
+            });
+
+            if (!res.ok) {
+                console.error("Failed to fetch user reservations");
+                this.loading = false;
+                return;
+            }
+
+            const data = await res.json();
+            this.reservations = data.history || [];
+            this.loading = false;
+
+            // Render charts after reservations loaded
+            renderUserStats(this.reservations);
+        },
+
+        formatTimeRange(startStr, endStr) {
+            if (!startStr) return "";
+            const s = new Date(startStr);
+            s.setTime(s.getTime() + 19800000);
+            const p = n => String(n).padStart(2, "0");
+            const st = `${p(s.getHours())}:${p(s.getMinutes())}:${p(s.getSeconds())}`;
+            if (!endStr) return `${st} - Ongoing`;
+            const e = new Date(endStr);
+            e.setTime(e.getTime() + 19800000);
+            const et = `${p(e.getHours())}:${p(e.getMinutes())}:${p(e.getSeconds())}`;
+            return `${st} - ${et}`;
+        },
+
+        formatDuration(startStr, endStr) {
+            if (!startStr) return "";
+            if (!endStr) return "Ongoing";
+            const diff = (new Date(endStr) - new Date(startStr)) / 1000;
+            const h = Math.floor(diff / 3600);
+            const m = Math.floor((diff % 3600) / 60);
+            const s = Math.floor(diff % 60);
+            return `${h}h ${m}m ${s}s`;
+        }
+    },
+
+    mounted() {
+        this.loadReservations();
+    }
+
+}).mount("#app");
+</script>
+
+</body>
+</html>

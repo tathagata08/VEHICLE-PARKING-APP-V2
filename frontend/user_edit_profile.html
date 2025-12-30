@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Edit Profile</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<div id="app" class="container mt-4">
+
+    <h2 class="text-center mb-4">Edit Your Profile</h2>
+
+    <div v-if="loading" class="alert alert-info">Loading...</div>
+
+    <form v-else @submit.prevent="updateProfile" class="card p-4 shadow-sm">
+        <div class="mb-3">
+            <label class="form-label">UID (Read-only)</label>
+            <input type="text" class="form-control" v-model="user.uid" disabled>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">First Name</label>
+            <input type="text" class="form-control" v-model="user.first_name" required>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Last Name</label>
+            <input type="text" class="form-control" v-model="user.last_name" required>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Age</label>
+            <input type="number" class="form-control" v-model="user.age" min="1" required>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Mobile Number</label>
+            <input type="text" class="form-control" v-model="user.mob_no" required>
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100">Save Changes</button>
+    </form>
+
+    <div v-if="message" class="alert mt-3" :class="messageType">{{ message }}</div>
+</div>
+
+<script>
+const { createApp } = Vue;
+
+createApp({
+    data() {
+        return {
+            token: localStorage.getItem("token"),
+            user: {},
+            loading: true,
+            message: "",
+            messageType: ""
+        };
+    },
+
+    methods: {
+        async loadProfile() {
+            const res = await fetch("http://127.0.0.1:5000/user/edit", {
+ 
+                headers: { "Authorization": `Bearer ${this.token}` }
+            });
+            const data = await res.json();
+            this.user = data.user;
+            this.loading = false;
+        },
+
+        async updateProfile() {
+            const res = await fetch("http://127.0.0.1:5000/user/edit", {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${this.token}`
+                },
+                body: JSON.stringify(this.user)
+            });
+
+            const data = await res.json();
+            this.message = data.message || data.error;
+            this.messageType = data.error ? "alert-danger" : "alert-success";
+        }
+    },
+
+    mounted() {
+        if (!this.token) window.location.href = "user_login.html";
+        this.loadProfile();
+    }
+}).mount("#app");
+</script>
+</body>
+</html>

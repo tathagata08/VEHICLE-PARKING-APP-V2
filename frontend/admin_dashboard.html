@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quickpark V2 - Admin Dashboard</title>
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+    body { background-color: #fff4f4; font-family: Arial, sans-serif; }
+    header { background: #b34747; color: white; padding: 1rem; border-radius: 0 0 12px 12px; }
+    header h2 { margin: 0; display: inline-block; }
+    header button { float: right; }
+    .card { border-radius: 12px; box-shadow: 0 3px 6px rgba(0,0,0,0.15); }
+    footer { background: #b34747; color: white; text-align: center; padding: 0.8rem; margin-top: 30px; }
+    .list-group-item { font-size: 0.95rem; }
+    table th, table td { vertical-align: middle; }
+</style>
+</head>
+<body>
+<div id="app">
+
+<header>
+    <h2>Welcome Admin, {{ adminName }}</h2>
+    <button class="btn btn-light btn-sm" @click="logout">Logout</button>
+</header>
+
+<div class="container mt-4 mb-5">
+
+    <div class="row g-4">
+        <div class="col-md-3">
+            <div class="card p-3 text-center bg-light">
+                <h5>Total Users</h5>
+                <p class="fs-3">{{ totalUsers }}</p>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card p-3 text-center bg-light">
+                <h5>Total Lots</h5>
+                <p class="fs-3">{{ totalLots }}</p>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card p-3 text-center bg-light">
+                <h5>Active Reservations</h5>
+                <p class="fs-3">{{ activeReservations }}</p>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card p-3 text-center bg-light">
+                <h5>Recent Bookings</h5>
+                <p class="fs-3">{{ recentBookingsCount }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <button class="btn btn-primary" @click="goToParkingLotPage">Manage Parking Lots</button>
+    </div>
+
+    <button class="btn btn-primary btn-sm" onclick="window.location.href='admin_stat.html'">
+    View Stats
+    </button>
+    <div class="mt-3">
+        <button class="btn btn-info" @click="triggerCsvExport">
+            Export CSV
+        </button>
+    </div>
+
+    <div class="mt-4">
+        <h4>Recent Reservations</h4>
+        <ul class="list-group">
+            <li class="list-group-item" v-for="res in recentReservations" :key="res.id">
+                User: {{ res.uid }} | Spot: {{ res.spot_id }} | Lot: {{ res.lot_location }} |
+                Vehicle: {{ res.vehicle_number }} | Released: {{ res.released_at ? res.released_at : "Active" }}
+            </li>
+        </ul>
+    </div>
+
+    <div class="mt-5">
+        <h4>Users</h4>
+        <div class="mb-3">
+            <input type="text" class="form-control" placeholder="Search users..." v-model="userSearchQuery">
+        </div>
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>UID</th>
+                    <th>Name</th>
+                    <th>Age</th>
+                    <th>Mobile</th>
+                    <th>Blocked</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr v-for="user in filteredUsers" :key="user.uid">
+                    <td>{{ user.uid }}</td>
+                    <td>{{ user.first_name }} {{ user.last_name }}</td>
+                    <td>{{ user.age }}</td>
+                    <td>{{ user.mob_no }}</td>
+                    <td>{{ user.is_blocked ? 'Yes' : 'No' }}</td>
+                    <td>
+                        <button class="btn btn-sm" 
+                                :class="user.is_blocked ? 'btn-success' : 'btn-warning'"
+                                @click="toggleBlock(user)">
+                            {{ user.is_blocked ? 'Unblock' : 'Block' }}
+                        </button>
+                        <button class="btn btn-sm btn-info ms-1" @click="editUser(user)">Edit</button>
+                        <button class="btn btn-success btn-sm" 
+                                @click="viewUserHistory(user.uid)">
+                            View Reservations
+                        </button>
+                        <button class="btn btn-primary btn-sm ms-1" @click="triggerMonthlyReport(user.uid)">
+        Send Report
+    </button>
+                    </td>
+                </tr>
+                <tr v-if="filteredUsers.length === 0">
+                    <td colspan="6" class="text-center text-muted">No users found.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+</div>
+</div>
+
+<footer>
+    &copy; 2025 Quickpark
+</footer>
+
+<script>
+const { createApp } = Vue;
+
+createApp({
+    data() {
+        return {
+            adminName: '',
+            totalUsers: 0,
+            totalLots: 0,
+            activeReservations: 0,
+            recentBookingsCount: 0,
+            recentReservations: [],
+            users: [],
+            userSearchQuery: ''
+        };
+    },
+
+    computed: {
+        filteredUsers() {
+            if(!this.userSearchQuery) return this.users;
+            const q = this.userSearchQuery.toLowerCase();
+            return this.users.filter(user =>
+                String(user.uid).includes(q) ||
+                user.first_name.toLowerCase().includes(q) ||
+                user.last_name.toLowerCase().includes(q) ||
+                String(user.age).includes(q) ||
+                String(user.mob_no).includes(q)
+            );
+        }
+    },
+
+    mounted() {
+        this.fetchDashboard();
+        this.fetchUsers();
+    },
+
+    methods: {
+        async fetchDashboard() {
+            const token = localStorage.getItem("admin_token");
+            if (!token) return window.location.href = "admin_login.html";
+
+            try {
+                const res = await fetch("http://127.0.0.1:5000/admin/dashboard", {
+                    headers: { "Authorization": "Bearer " + token }
+                });
+                const data = await res.json();
+                if(res.ok) {
+                    this.adminName = data.adminName;
+                    this.totalUsers = data.totalUsers;
+                    this.totalLots = data.totalLots;
+                    this.activeReservations = data.activeReservations;
+                    this.recentBookingsCount = data.recentBookingsCount;
+                    this.recentReservations = data.recentReservations;
+                } else alert(data.error || "Failed to fetch dashboard");
+            } catch(err) { console.error(err); alert("Server error"); }
+        },
+        async triggerMonthlyReport(uid) {
+        const token = localStorage.getItem("admin_token");
+        if (!token) return alert("Admin token missing");
+
+        try {
+            const res = await fetch(`http://127.0.0.1:5000/admin/send_report/${uid}`, {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    "Content-Type": "application/json"
+                }
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+                alert(data.message || `Monthly report triggered for user ${uid}`);
+            } else {
+                alert(data.error || "Failed to trigger report");
+            }
+        } catch (err) {
+            console.error(err);
+            alert("Server error while triggering report");
+        }
+    },
+
+        async triggerCsvExport() {
+            const lot_id = prompt("Enter Lot ID for CSV export (leave empty for all lots):");
+            const token = localStorage.getItem("admin_token");
+            try {
+                const res = await fetch(`http://127.0.0.1:5000/admin/export_csv`, {
+                    method: "POST",
+                    headers: { 
+                        "Authorization": "Bearer " + token,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ lot_id: lot_id || null })
+                });
+                const data = await res.json();
+                alert(data.message || "Task triggered");
+            } catch(err) {
+                console.error(err);
+                alert("Server error");
+            }
+        },
+
+        viewUserHistory(uid) {
+            window.location.href = `admin_user_reservations.html?uid=${uid}`;
+        },
+
+        async fetchUsers() {
+            const token = localStorage.getItem("admin_token");
+            if (!token) return;
+            try {
+                const res = await fetch("http://127.0.0.1:5000/admin/users", {
+                    headers: { "Authorization": "Bearer " + token }
+                });
+                const data = await res.json();
+
+                if (res.ok) this.users = data; 
+                else alert(data.error || "Failed to fetch users");
+            } catch(err) { console.error(err); alert("Server error"); }
+        },
+
+        async toggleBlock(user) {
+            const password = prompt("Enter your admin password to confirm:");
+            if (!password) return;
+
+            const token = localStorage.getItem("admin_token");
+            try {
+                const res = await fetch(`http://127.0.0.1:5000/admin/user/${user.uid}/block`, {
+                    method: "POST",
+                    headers: { 
+                        "Authorization": "Bearer " + token,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ password })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    user.is_blocked = !user.is_blocked;
+                    alert(data.message);
+                } else {
+                    alert(data.error || "Failed to block/unblock user");
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Server error");
+            }
+        },
+
+        editUser(user) {
+            const newName = prompt("Enter new full name", user.first_name + " " + user.last_name);
+            if (!newName) return;
+
+            const newAge = prompt("Enter new age", user.age);
+            if (!newAge) return;
+
+            const newMob = prompt("Enter new mobile number", user.mob_no);
+            if (!newMob) return;
+
+            const [first, last] = newName.split(" ");
+            const token = localStorage.getItem("admin_token");
+
+            fetch(`http://127.0.0.1:5000/admin/user/${user.uid}`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + token
+                },
+                body: JSON.stringify({
+                    first_name: first,
+                    last_name: last,
+                    age: Number(newAge),
+                    mob_no: newMob
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.message) {
+                    user.first_name = first;
+                    user.last_name = last;
+                    user.age = newAge;
+                    user.mob_no = newMob;
+                    alert("User updated!");
+                } else {
+                    alert(data.error || "Update failed");
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert("Server error");
+            });
+        },
+
+        logout() { localStorage.removeItem("admin_token"); window.location.href = "admin_login.html"; },
+        goToParkingLotPage() { window.location.href = "admin_reservation.html"; }
+    }
+}).mount("#app");
+</script>
+</body>
+</html>
